@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>هاند - لعبة ورق جماعية</title>
+<meta name="theme-color" content="#4a5a2a">
+<link rel="manifest" href="manifest.json">
+<style>
+  :root{
+    --olive:#4a5a2a; --olive-d:#33401c; --gold:#c9a227; --gold-l:#e8cf6a;
+    --felt:#2f4a1f; --card-bg:#fdf8ec; --text:#f3ecd8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;font-family:'Tahoma','Segoe UI',sans-serif;background:var(--olive-d);color:var(--text);overflow:hidden;}
+  #app{height:100%;display:flex;flex-direction:column;}
+  .screen{flex:1;display:none;flex-direction:column;padding:16px;overflow-y:auto;}
+  .screen.active{display:flex;}
+  h1{color:var(--gold-l);text-align:center;font-size:26px;margin:10px 0 4px;}
+  h2{color:var(--gold-l);font-size:18px;margin:10px 0;}
+  p.sub{text-align:center;color:#cfd7bd;margin:0 0 20px;font-size:13px;}
+  .btn{background:linear-gradient(180deg,var(--gold-l),var(--gold));color:#2a2a12;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:bold;margin:8px 0;cursor:pointer;}
+  .btn:active{transform:scale(0.97);}
+  .btn.secondary{background:transparent;border:2px solid var(--gold);color:var(--gold-l);}
+  .btn.small{padding:8px 14px;font-size:13px;width:auto;}
+  .btn:disabled{opacity:0.4;}
+  input[type=text],textarea{width:100%;border-radius:8px;border:1px solid #6b7a3d;background:#1f2a12;color:var(--text);padding:10px;font-size:14px;margin:6px 0;}
+  textarea{resize:vertical;min-height:70px;font-family:monospace;font-size:11px;}
+  .card-box{background:#25330f;border:1px solid #55642f;border-radius:12px;padding:14px;margin:10px 0;}
+  .row{display:flex;gap:8px;}
+  .row .btn{flex:1;}
+  .slot{border:1px dashed #6b7a3d;border-radius:10px;padding:10px;margin:8px 0;}
+  .slot .status{font-size:12px;color:#cfd7bd;}
+  .status.ok{color:#8fdc7a;}
+  small.hint{color:#9fae7c;font-size:11px;display:block;margin-top:2px;}
+
+  /* game screen */
+  #screen-game{padding:6px;}
+  .table-wrap{flex:1;position:relative;background:radial-gradient(ellipse at center,var(--felt),#1c2c12);border-radius:16px;margin:6px;overflow:hidden;}
+  .seat{position:absolute;text-align:center;font-size:12px;}
+  .seat .nm{background:rgba(0,0,0,0.4);border-radius:8px;padding:3px 8px;display:inline-block;color:var(--gold-l);}
+  .seat.top{top:8px;left:50%;transform:translateX(-50%);}
+  .seat.right{top:50%;right:8px;transform:translateY(-50%);}
+  .seat.left{top:50%;left:8px;transform:translateY(-50%);}
+  .seat.bottom{bottom:8px;left:50%;transform:translateX(-50%);}
+  .turn-mark{box-shadow:0 0 0 2px var(--gold-l);}
+  .trick-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:160px;height:160px;}
+  .trick-card{position:absolute;width:38px;height:54px;background:var(--card-bg);border-radius:5px;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 2px 4px rgba(0,0,0,0.5);}
+  .trick-card.p0{top:80px;left:60px;}
+  .trick-card.p1{top:60px;left:20px;}
+  .trick-card.p2{top:0px;left:60px;}
+  .trick-card.p3{top:60px;left:100px;}
+  .hand-strip{display:flex;justify-content:center;flex-wrap:wrap;gap:4px;padding:8px 4px;min-height:80px;}
+  .card{width:44px;height:64px;background:var(--card-bg);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:bold;font-size:13px;box-shadow:0 2px 3px rgba(0,0,0,0.4);cursor:pointer;user-select:none;}
+  .card.red{color:#b3122e;}
+  .card.black{color:#1a1a1a;}
+  .card.disabled{opacity:0.35;cursor:not-allowed;}
+  .card:active:not(.disabled){transform:translateY(-6px);}
+  .topbar{display:flex;justify-content:space-between;align-items:center;padding:4px 10px;font-size:12px;color:var(--gold-l);}
+  .score-pill{background:#1f2a12;border:1px solid var(--gold);border-radius:20px;padding:4px 10px;}
+  .bid-panel,.trump-panel{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);background:#1f2a12;border:1px solid var(--gold);border-radius:12px;padding:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;width:90%;max-width:320px;}
+  .bid-panel button, .trump-panel button{background:var(--gold);border:none;border-radius:8px;padding:8px 10px;font-weight:bold;color:#2a2a12;}
+  .msg-banner{position:absolute;top:44px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:6px 14px;border-radius:20px;font-size:13px;color:var(--gold-l);}
+  .footer-link{text-align:center;font-size:11px;color:#7d8a5c;margin-top:auto;padding-top:10px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- الشاشة الرئيسية -->
+  <div class="screen active" id="screen-home">
+    <h1>🂡 هاند</h1>
+    <p class="sub">لعبة ورق جماعية لأربعة لاعبين، تتصل مباشرة بين الهواتف عبر نقطة الاتصال (بدون إنترنت)</p>
+    <div class="card-box">
+      <button class="btn" onclick="goto('screen-host-setup')">🎮 إنشاء غرفة (أنا المضيف)</button>
+      <button class="btn secondary" onclick="goto('screen-join-setup')">🔗 الانضمام لغرفة</button>
+    </div>
+    <div class="footer-link">شغّل نقطة اتصال (Hotspot) من هاتف واحد، واطلب من البقية الاتصال بها قبل البدء</div>
+  </div>
+
+  <!-- شاشة إعداد المضيف -->
+  <div class="screen" id="screen-host-setup">
+    <h2>إنشاء الغرفة</h2>
+    <input type="text" id="hostName" placeholder="اسمك">
+    <div id="hostSlots"></div>
+    <button class="btn" id="startGameBtn" disabled onclick="hostStartGame()">ابدأ اللعبة</button>
+    <button class="btn secondary small" onclick="goto('screen-home')">رجوع</button>
+  </div>
+
+  <!-- شاشة الانضمام -->
+  <div class="screen" id="screen-join-setup">
+    <h2>الانضمام لغرفة</h2>
+    <input type="text" id="guestName" placeholder="اسمك">
+    <div class="card-box">
+      <p style="font-size:13px">الصق رمز الدعوة الذي أرسله لك المضيف:</p>
+      <textarea id="offerInput" placeholder="رمز الدعوة هنا..."></textarea>
+      <button class="btn" onclick="guestAccept()">توليد رمز الرد</button>
+    </div>
+    <div class="card-box" id="answerBox" style="display:none">
+      <p style="font-size:13px">أرسل هذا الرمز إلى المضيف:</p>
+      <textarea id="answerOutput" readonly></textarea>
+      <div class="row">
+        <button class="btn small" onclick="copyText('answerOutput')">📋 نسخ</button>
+        <button class="btn small secondary" onclick="shareText('answerOutput')">📤 مشاركة</button>
+      </div>
+      <p class="status" id="guestStatus">بانتظار اتصال المضيف...</p>
+    </div>
+    <button class="btn secondary small" onclick="goto('screen-home')">رجوع</button>
+  </div>
+
+  <!-- شاشة اللعب -->
+  <div class="screen" id="screen-game">
+    <div class="topbar">
+      <div class="score-pill" id="scoreA">فريقنا: 0</div>
+      <div id="roundInfo" style="font-size:11px"></div>
+      <div class="score-pill" id="scoreB">الخصم: 0</div>
+    </div>
+    <div class="table-wrap" id="tableWrap">
+      <div class="seat top" id="seat2"><div class="nm">-</div></div>
+      <div class="seat right" id="seat1"><div class="nm">-</div></div>
+      <div class="seat left" id="seat3"><div class="nm">-</div></div>
+      <div class="seat bottom" id="seat0"><div class="nm">-</div></div>
+      <div class="trick-area" id="trickArea"></div>
+      <div class="msg-banner" id="msgBanner" style="display:none"></div>
+      <div class="bid-panel" id="bidPanel" style="display:none"></div>
+      <div class="trump-panel" id="trumpPanel" style="display:none"></div>
+    </div>
+    <div class="hand-strip" id="handStrip"></div>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================================
+   هاند - منطق اللعبة (نسخة مبسّطة قابلة للتعديل من نمط ألعاب الترنيب)
+   القواعد المعتمدة هنا (يمكن تعديلها بسهولة داخل الكود):
+   - 4 لاعبين، الفريق الأول (0و2) ضد الفريق الثاني (1و3)
+   - مزاد: كل لاعب يزايد رقم من 7 إلى 13 أو يمرر، الأعلى يختار الحكم (أو "بدون أتو")
+   - إذا مرر الجميع بدون مزايدة، يُجبر الموزّع على تعهد 7 ويختار الحكم
+   - أخذ الأكل: يجب اللحاق بلون الطلب إن وجد، الحكم يعلو أي لون آخر
+   - التسجيل: فريق المزاد يحصل على أشواطه×10 إذا حقق تعهده، وإلا يخسر تعهده×10
+             الفريق الآخر يحصل دائماً على أشواطه×10
+   - الفوز عند الوصول إلى 151 نقطة
+   ========================================================================= */
+
+const SUITS = ['♠','♥','♦','♣'];
+const SUIT_COLOR = {'♠':'black','♣':'black','♥':'red','♦':'red'};
+const RANKS = [2,3,4,5,6,7,8,9,10,'J','Q','K','A'];
+const RANK_LABEL = r => r;
+const TARGET_SCORE = 151;
+
+function rankValue(r){ return RANKS.indexOf(r)+2; }
+function makeDeck(){
+  const d=[];
+  for(const s of SUITS) for(const r of RANKS) d.push({suit:s, rank:r});
+  return d;
+}
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+function sortHand(hand){
+  return hand.slice().sort((a,b)=>{
+    if(a.suit!==b.suit) return SUITS.indexOf(a.suit)-SUITS.indexOf(b.suit);
+    return rankValue(a.rank)-rankValue(b.rank);
+  });
+}
+function cardKey(c){ return c.suit+c.rank; }
+
+/* ============================ حالة عامة ============================ */
+let role = null;           // 'host' | 'guest'
+let myIndex = 0;           // فهرس اللاعب أنا (0..3)
+let myName = 'أنت';
+const ICE_CONFIG = { iceServers: [] }; // اتصال محلي بحت عبر نقطة الاتصال
+// إن واجهت مشاكل في الاتصال جرّب إضافة ستون سيرفر (يحتاج إنترنت لحظياً):
+// const ICE_CONFIG = { iceServers: [{urls:'stun:stun.l.google.com:19302'}] };
+
+function goto(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ===================== إشارات WebRTC (رمز يدوي) ===================== */
+function encodeDesc(desc){
+  return btoa(unescape(encodeURIComponent(JSON.stringify(desc))));
+}
+function decodeDesc(text){
+  return JSON.parse(decodeURIComponent(escape(atob(text.trim()))));
+}
+function waitIceComplete(pc){
+  return new Promise(resolve=>{
+    if(pc.iceGatheringState==='complete') return resolve();
+    pc.addEventListener('icegatheringstatechange', function h(){
+      if(pc.iceGatheringState==='complete'){ pc.removeEventListener('icegatheringstatechange',h); resolve(); }
+    });
+  });
+}
+function copyText(id){
+  const el=document.getElementById(id);
+  el.select(); el.setSelectionRange(0,999999);
+  navigator.clipboard?.writeText(el.value).catch(()=>document.execCommand('copy'));
+}
+function shareText(id){
+  const text=document.getElementById(id).value;
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); }
+  else copyText(id);
+}
+
+/* ============================ جانب المضيف ============================ */
+const hostConns = {}; // slot(1..3) -> {pc, dc, name, connected}
+
+function hostInit(){
+  const wrap = document.getElementById('hostSlots');
+  wrap.innerHTML='';
+  for(let slot=1; slot<=3; slot++){
+    hostConns[slot] = {pc:null, dc:null, name:null, connected:false};
+    const div = document.createElement('div');
+    div.className='slot';
+    div.id='slot-'+slot;
+    div.innerHTML = `
+      <b>لاعب ${slot+1}</b>
+      <div class="status" id="status-${slot}">غير متصل</div>
+      <button class="btn small" onclick="hostCreateOffer(${slot})">توليد رمز دعوة</button>
+      <div id="offerBox-${slot}" style="display:none">
+        <textarea id="offerOut-${slot}" readonly></textarea>
+        <div class="row">
+          <button class="btn small" onclick="copyText('offerOut-${slot}')">📋 نسخ</button>
+          <button class="btn small secondary" onclick="shareText('offerOut-${slot}')">📤 مشاركة</button>
+        </div>
+        <small class="hint">أرسل هذا الرمز للاعب ${slot+1}، ثم الصق رده هنا:</small>
+        <textarea id="answerIn-${slot}" placeholder="الصق رمز رد اللاعب هنا..."></textarea>
+        <button class="btn small" onclick="hostAcceptAnswer(${slot})">اتصال</button>
+      </div>`;
+    wrap.appendChild(div);
+  }
+}
+
+async function hostCreateOffer(slot){
+  const c = hostConns[slot];
+  const pc = new RTCPeerConnection(ICE_CONFIG);
+  c.pc = pc;
+  const dc = pc.createDataChannel('game');
+  c.dc = dc;
+  setupHostChannel(slot, dc);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await waitIceComplete(pc);
+  document.getElementById('offerBox-'+slot).style.display='block';
+  document.getElementById('offerOut-'+slot).value = encodeDesc(pc.localDescription);
+}
+
+async function hostAcceptAnswer(slot){
+  const c = hostConns[slot];
+  const text = document.getElementById('answerIn-'+slot).value;
+  if(!text.trim()) return;
+  try{
+    const desc = decodeDesc(text);
+    await c.pc.setRemoteDescription(desc);
+  }catch(e){ alert('رمز غير صالح، تأكد من نسخه كاملاً'); }
+}
+
+function setupHostChannel(slot, dc){
+  dc.onopen = ()=>{
+    hostConns[slot].connected = true;
+    document.getElementById('status-'+slot).textContent = 'متصل، بانتظار الاسم...';
+    document.getElementById('status-'+slot).classList.add('ok');
+    checkAllConnected();
+  };
+  dc.onclose = ()=>{ hostConns[slot].connected=false; };
+  dc.onmessage = (ev)=>{
+    const msg = JSON.parse(ev.data);
+    if(msg.t==='join'){
+      hostConns[slot].name = msg.name || ('لاعب '+(slot+1));
+      document.getElementById('status-'+slot).textContent = 'متصل: '+hostConns[slot].name;
+      checkAllConnected();
+      if(G) broadcastState();
+    } else {
+      handleGuestAction(slot, msg);
+    }
+  };
+}
+
+function checkAllConnected(){
+  const allOk = [1,2,3].every(s=>hostConns[s].connected && hostConns[s].name);
+  document.getElementById('startGameBtn').disabled = !allOk;
+}
+
+document.getElementById('hostName') && (function(){})();
+
+document.getElementById('screen-home'); // noop keep order
+
+/* ============================ جانب الضيف ============================ */
+let guestPC=null, guestDC=null;
+
+async function guestAccept(){
+  const offerText = document.getElementById('offerInput').value;
+  if(!offerText.trim()){ alert('الصق رمز الدعوة أولاً'); return; }
+  myName = document.getElementById('guestName').value.trim() || 'ضيف';
+  role='guest';
+  try{
+    const offer = decodeDesc(offerText);
+    guestPC = new RTCPeerConnection(ICE_CONFIG);
+    guestPC.ondatachannel = (ev)=>{
+      guestDC = ev.channel;
+      setupGuestChannel(guestDC);
+    };
+    await guestPC.setRemoteDescription(offer);
+    const answer = await guestPC.createAnswer();
+    await guestPC.setLocalDescription(answer);
+    await waitIceComplete(guestPC);
+    document.getElementById('answerBox').style.display='block';
+    document.getElementById('answerOutput').value = encodeDesc(guestPC.localDescription);
+  }catch(e){
+    alert('رمز الدعوة غير صالح');
+  }
+}
+
+function setupGuestChannel(dc){
+  dc.onopen = ()=>{
+    document.getElementById('guestStatus').textContent = 'متصل! بانتظار بدء اللعبة...';
+    dc.send(JSON.stringify({t:'join', name: myName}));
+  };
+  dc.onmessage = (ev)=>{
+    const msg = JSON.parse(ev.data);
+    if(msg.t==='state'){
+      myIndex = msg.s.you;
+      renderGame(msg.s);
+      goto('screen-game');
+    }
+  };
+}
+
+function guestSend(obj){
+  if(guestDC && guestDC.readyState==='open') guestDC.send(JSON.stringify(obj));
+}
+
+/* ============================ منطق اللعبة (مضيف) ============================ */
+let G = null; // الحالة الكاملة (عند المضيف فقط)
+
+function hostStartGame(){
+  role='host'; myIndex=0;
+  myName = document.getElementById('hostName').value.trim() || 'أنت';
+  const names = [myName, hostConns[1].name, hostConns[2].name, hostConns[3].name];
+  G = {
+    names,
+    dealer: 0,
+    hands: [[],[],[],[]],
+    phase: 'bidding', // bidding -> trump -> playing -> roundEnd -> gameOver
+    turn: 0,
+    bids: [null,null,null,null],
+    highestBid: 0,
+    highestBidder: null,
+    trump: null,
+    trick: [], // [{p, card}]
+    leadSuit: null,
+    tricksWon: [0,0], // team A(0,2), team B(1,3)
+    scores: [0,0],
+    lastMessage: '',
+    roundNumber: 1
+  };
+  dealNewRound();
+  goto('screen-game');
+  broadcastState();
+}
+
+function teamOf(p){ return p%2===0 ? 0 : 1; }
+
+function dealNewRound(){
+  const deck = shuffle(makeDeck());
+  for(let p=0;p<4;p++){ G.hands[p] = sortHand(deck.slice(p*13,p*13+13)); }
+  G.phase='bidding';
+  G.turn = (G.dealer+1)%4;
+  G.bids=[null,null,null,null];
+  G.highestBid=0; G.highestBidder=null; G.trump=null;
+  G.trick=[]; G.leadSuit=null; G.tricksWon=[0,0];
+  G.lastMessage = G.names[G.turn] + ' يبدأ المزايدة';
+}
+
+function handleGuestAction(slot, msg){
+  const p = slot; // slot 1,2,3 == player index 1,2,3
+  applyAction(p, msg);
+}
+
+function applyAction(p, msg){
+  if(!G) return;
+  if(msg.t==='bid'){
+    if(G.phase!=='bidding' || G.turn!==p) return;
+    if(msg.v<=G.highestBid || msg.v<7 || msg.v>13) return;
+    G.bids[p]=msg.v; G.highestBid=msg.v; G.highestBidder=p;
+    advanceBidTurn();
+  } else if(msg.t==='pass'){
+    if(G.phase!=='bidding' || G.turn!==p) return;
+    G.bids[p]='pass';
+    advanceBidTurn();
+  } else if(msg.t==='trump'){
+    if(G.phase!=='trump' || G.highestBidder!==p) return;
+    G.trump = msg.s;
+    G.phase='playing';
+    G.turn = (G.highestBidder+1)%4;
+    G.lastMessage = G.names[G.highestBidder]+' اختار '+(msg.s==='NT'?'بدون أتو':'حكم '+msg.s);
+  } else if(msg.t==='play'){
+    if(G.phase!=='playing' || G.turn!==p) return;
+    playCard(p, msg.card);
+  }
+  broadcastState();
+}
+
+function advanceBidTurn(){
+  const active = [0,1,2,3].filter(p=>G.bids[p]!=='pass');
+  if(active.length===1 && G.highestBidder!==null){
+    startTrumpPhase();
+    return;
+  }
+  let next = (G.turn+1)%4;
+  let loop=0;
+  while(G.bids[next]==='pass' && loop<4){ next=(next+1)%4; loop++; }
+  if(G.bids.every(b=>b==='pass')){
+    // الجميع مرر: الموزّع يُجبر على 7
+    G.highestBid=7; G.highestBidder=G.dealer; G.bids[G.dealer]=7;
+    startTrumpPhase();
+    return;
+  }
+  G.turn = next;
+  G.lastMessage = G.names[G.turn]+' دوره في المزايدة';
+}
+
+function startTrumpPhase(){
+  G.phase='trump';
+  G.lastMessage = G.names[G.highestBidder]+' يختار الحكم...';
+}
+
+function legalCardsFor(p){
+  const hand = G.hands[p];
+  if(!G.leadSuit) return hand;
+  const follow = hand.filter(c=>c.suit===G.leadSuit);
+  return follow.length ? follow : hand;
+}
+
+function playCard(p, card){
+  const hand = G.hands[p];
+  const idx = hand.findIndex(c=>c.suit===card.suit && c.rank===card.rank);
+  if(idx<0) return;
+  const legal = legalCardsFor(p);
+  if(!legal.some(c=>c.suit===card.suit && c.rank===card.rank)) return; // غير مسموح
+  hand.splice(idx,1);
+  if(G.trick.length===0) G.leadSuit = card.suit;
+  G.trick.push({p, card});
+  if(G.trick.length<4){
+    G.turn = (p+1)%4;
+  } else {
+    resolveTrick();
+  }
+}
+
+function resolveTrick(){
+  let winner = G.trick[0];
+  for(const entry of G.trick.slice(1)){
+    const a=winner.card, b=entry.card;
+    const aTrump = G.trump!=='NT' && a.suit===G.trump;
+    const bTrump = G.trump!=='NT' && b.suit===G.trump;
+    if(bTrump && !aTrump) winner=entry;
+    else if(bTrump===aTrump){
+      if(b.suit===a.suit && rankValue(b.rank)>rankValue(a.rank)) winner=entry;
+      else if(!aTrump && b.suit===a.suit && rankValue(b.rank)>rankValue(a.rank)) winner=entry;
+    }
+  }
+  const team = teamOf(winner.p);
+  G.tricksWon[team]++;
+  G.lastMessage = G.names[winner.p]+' يأخذ الشوط';
+  const finishedTrick = G.trick;
+  G.trick=[]; G.leadSuit=null; G.turn=winner.p;
+  setTimeout(()=>{
+    if(G.hands[0].length===0){ endRound(); }
+    broadcastState();
+  }, 1200);
+}
+
+function endRound(){
+  const bidTeam = teamOf(G.highestBidder);
+  const otherTeam = 1-bidTeam;
+  if(G.tricksWon[bidTeam] >= G.highestBid){
+    G.scores[bidTeam] += G.tricksWon[bidTeam]*10;
+  } else {
+    G.scores[bidTeam] -= G.highestBid*10;
+  }
+  G.scores[otherTeam] += G.tricksWon[otherTeam]*10;
+  G.lastMessage = 'انتهت الجولة';
+  if(G.scores[0]>=TARGET_SCORE || G.scores[1]>=TARGET_SCORE){
+    G.phase='gameOver';
+  } else {
+    G.dealer = (G.dealer+1)%4;
+    G.roundNumber++;
+    dealNewRound();
+  }
+}
+
+/* ============================ إرسال الحالة ============================ */
+function stateFor(p){
+  return {
+    you: p,
+    names: G.names,
+    dealer: G.dealer,
+    phase: G.phase,
+    turn: G.turn,
+    highestBid: G.highestBid,
+    highestBidder: G.highestBidder,
+    trump: G.trump,
+    trick: G.trick,
+    tricksWon: G.tricksWon,
+    scores: G.scores,
+    lastMessage: G.lastMessage,
+    roundNumber: G.roundNumber,
+    handCounts: G.hands.map(h=>h.length),
+    yourHand: sortHand(G.hands[p]),
+    legal: G.phase==='playing' ? legalCardsFor(p).map(cardKey) : []
+  };
+}
+
+function broadcastState(){
+  if(!G) return;
+  renderGame(stateFor(0));
+  for(let slot=1; slot<=3; slot++){
+    const c = hostConns[slot];
+    if(c.dc && c.dc.readyState==='open'){
+      c.dc.send(JSON.stringify({t:'state', s: stateFor(slot)}));
+    }
+  }
+}
+
+/* ============================ الإرسال من الضيف ============================ */
+function sendAction(obj){
+  if(role==='host') applyAction(0, obj);
+  else guestSend(obj);
+}
+
+/* ============================ الرسم ============================ */
+function renderGame(s){
+  document.getElementById('scoreA').textContent = 'فريقنا: '+s.scores[teamOf(s.you)];
+  document.getElementById('scoreB').textContent = 'الخصم: '+s.scores[1-teamOf(s.you)];
+  document.getElementById('roundInfo').textContent = 'جولة '+s.roundNumber + (s.trump ? ' | الحكم: '+(s.trump==='NT'?'بدون':s.trump) : '');
+
+  const order = [0,1,2,3].map(i=>(i+s.you)%4); // [أنت, يمين, أمام, يسار]
+  const seatIds = ['seat0','seat1','seat2','seat3'];
+  order.forEach((p, i)=>{
+    const el = document.getElementById(seatIds[i]);
+    const cnt = s.handCounts[p];
+    el.innerHTML = `<div class="nm ${s.turn===p?'turn-mark':''}">${s.names[p]||'؟'} (${cnt})</div>`;
+  });
+
+  // الأكلة الحالية
+  const trickArea = document.getElementById('trickArea');
+  trickArea.innerHTML='';
+  s.trick.forEach(entry=>{
+    const relPos = (entry.p - s.you + 4)%4; // 0=أنت 1=يمين 2=أمام 3=يسار
+    const div = document.createElement('div');
+    div.className = 'trick-card p'+relPos;
+    div.classList.add(SUIT_COLOR[entry.card.suit]==='red'?'red':'black');
+    div.textContent = entry.card.rank+entry.card.suit;
+    trickArea.appendChild(div);
+  });
+
+  const banner = document.getElementById('msgBanner');
+  if(s.lastMessage){ banner.style.display='block'; banner.textContent = s.lastMessage; }
+  else banner.style.display='none';
+
+  // لوحة المزايدة
+  const bidPanel = document.getElementById('bidPanel');
+  const trumpPanel = document.getElementById('trumpPanel');
+  bidPanel.style.display='none'; trumpPanel.style.display='none';
+  if(s.phase==='bidding' && s.turn===s.you){
+    bidPanel.style.display='flex';
+    bidPanel.innerHTML='';
+    for(let v=Math.max(7,s.highestBid+1); v<=13; v++){
+      const b=document.createElement('button');
+      b.textContent=v;
+      b.onclick=()=>sendAction({t:'bid', v});
+      bidPanel.appendChild(b);
+    }
+    const passBtn=document.createElement('button');
+    passBtn.textContent='تمرير';
+    passBtn.onclick=()=>sendAction({t:'pass'});
+    bidPanel.appendChild(passBtn);
+  }
+  if(s.phase==='trump' && s.highestBidder===s.you){
+    trumpPanel.style.display='flex';
+    trumpPanel.innerHTML='';
+    SUITS.forEach(suit=>{
+      const b=document.createElement('button');
+      b.textContent=suit;
+      b.onclick=()=>sendAction({t:'trump', s:suit});
+      trumpPanel.appendChild(b);
+    });
+    const ntBtn=document.createElement('button');
+    ntBtn.textContent='بدون أتو';
+    ntBtn.onclick=()=>sendAction({t:'trump', s:'NT'});
+    trumpPanel.appendChild(ntBtn);
+  }
+
+  // يدك
+  const strip = document.getElementById('handStrip');
+  strip.innerHTML='';
+  const legalSet = new Set(s.legal);
+  s.yourHand.forEach(c=>{
+    const div=document.createElement('div');
+    const key = cardKey(c);
+    const canPlay = s.phase==='playing' && s.turn===s.you && legalSet.has(key);
+    div.className = 'card '+SUIT_COLOR[c.suit] + (s.phase==='playing' && s.turn===s.you && !canPlay ? ' disabled':'');
+    div.innerHTML = c.rank+'<br>'+c.suit;
+    if(canPlay) div.onclick=()=>sendAction({t:'play', card:{suit:c.suit, rank:c.rank}});
+    strip.appendChild(div);
+  });
+
+  if(s.phase==='gameOver'){
+    const winner = s.scores[0]>s.scores[1] ? 0 : 1;
+    document.getElementById('msgBanner').style.display='block';
+    document.getElementById('msgBanner').textContent = (winner===teamOf(s.you)?'فريقكم فاز! 🎉':'خسر فريقكم، حظ أوفر') + ' ('+s.scores[0]+' - '+s.scores[1]+')';
+  }
+}
+
+/* ============================ تهيئة ============================ */
+document.addEventListener('DOMContentLoaded', ()=>{
+  hostInit();
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
